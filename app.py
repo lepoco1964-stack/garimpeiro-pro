@@ -1,117 +1,44 @@
-import streamlit as st
+import os
+import json
 import pandas as pd
-import re
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 
-st.set_page_config(
-    page_title="TubeModeler Pro - Garimpador AI",
-    page_icon="🔥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ⚙️ CONFIGURAÇÕES — AJUSTE AQUI
+CHAVE_API = "COLE_SUA_CHAVE_AQUI"          # ← Coloque sua chave entre as aspas
+NICHO = "música"                           # Palavra-chave do seu nicho
+MAX_RESULTADOS_BUSCA = 50                  # Quantos canais buscar automaticamente
+MAX_INSCRITOS = 5000                       # Apenas canais com até X inscritos
+MIN_RELACAO_VIS_INS = 10                   # Mínimo: 10× visualizações sobre inscritos
+IDADE_MAXIMA_DIAS = 180                    # Canais com menos de quantos dias
 
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #0b0f19;
-        color: #f8fafc;
-    }
-    .studio-header {
-        background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
-        border: 1px solid #374151;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-    }
-    .canal-card {
-        background-color: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        transition: transform 0.2s ease, border-color 0.2s ease;
-    }
-    .canal-card:hover {
-        border-color: #ef4444;
-        transform: translateY(-2px);
-    }
-    .badge-origem {
-        background-color: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-    .metric-box {
-        background-color: #1f2937;
-        border-radius: 10px;
-        padding: 12px;
-        text-align: center;
-        border: 1px solid #374151;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 🎯 SEUS 10 CANAIS DE REFERÊNCIA — COLE AQUI
+CANAIS_REFERENCIA = [
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1",   # Canal 1 — cole o ID do canal
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2",   # Canal 2
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx3",   # Canal 3
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx4",   # Canal 4
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx5",   # Canal 5
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx6",   # Canal 6
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx7",   # Canal 7
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx8",   # Canal 8
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx9",   # Canal 9
+    "UCxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx10"   # Canal 10
+]
 
-st.markdown("""
-    <div class="studio-header">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div>
-                <span style="background-color: #ef4444; color: white; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: bold;">🔥 TUBE MODELER PRO</span>
-                <h1 style="margin: 10px 0 5px 0; font-size: 28px; color: #ffffff;">Radar de Canais Outliers & Oportunidades</h1>
-                <p style="color: #9ca3af; margin: 0; font-size: 14px;">Garimpe canais de alto engajamento com filtros avançados e anti-fantasmas.</p>
-            </div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+youtube = build("youtube", "v3", developerKey=CHAVE_API)
 
-with st.sidebar:
-    st.markdown("### ⚙️ Painel de Controle")
-    st.markdown("---")
-    
-    chave_api = st.text_input("🔑 Chave da API do YouTube", value="AIzaSyBGrYp-CUjY6ih-cGs8nbtWmXL9bFv-tdE", type="password")
-    
-    nicho_opcao = st.selectbox(
-        "📂 Escolha o Nicho",
-        ["Finanças Pessoais", "Histórias / Mistério", "Cortes de Podcast", "Música", "Tecnologia", "Outro (Digitar abaixo)"]
-    )
-    if nicho_opcao == "Outro (Digitar abaixo)":
-        nicho = st.text_input("🎯 Digite o seu Nicho", value="curiosidades")
-    else:
-        nicho = nicho_opcao.lower()
-        
-    max_resultados = st.slider("🔍 Quantos canais buscar", 10, 50, 20, 10)
-    
-    st.markdown("---")
-    st.markdown("### 🛡️ Filtros Anti-Fantasmas")
-    min_inscritos = st.number_input("👥 Mínimo de Inscritos", value=100, step=50, help="Barra canais recém-criados sem público.")
-    max_inscritos = st.number_input("👥 Máximo de Inscritos", value=35000, step=5000)
-    min_videos = st.number_input("🎬 Mínimo de Vídeos no Canal", value=3, step=1, help="Garante que o canal tem conteúdo publicado.")
-    min_relacao = st.number_input("📈 Relação Mínima (Views/Inscritos)", value=15.0, step=5.0)
-    idade_maxima = st.number_input("📅 Idade máxima (Dias)", value=300, step=30)
-    
-    st.markdown("---")
-    st.markdown("### 🎯 Canais de Referência")
-    canais_ref_texto = st.text_area("IDs de Referência (um por linha)", value="", height=80, placeholder="Ex: UC_x5XG1OV2P6uZZ5FSM9Ttw")
-    lista_referencias = [c.strip() for c in canais_ref_texto.split("\n") if c.strip()]
-    
-    st.markdown("---")
-    executar_busca = st.button("🚀 INICIAR GARIMPAGEM", use_container_width=True, type="primary")
-
-def pegar_dados_canal(youtube_client, canal_id, origem="Busca automática"):
+def pegar_dados_canal_por_id(canal_id, origem="Busca automática"):
+    """Pega dados completos de UM canal pelo ID"""
     try:
-        stats = youtube_client.channels().list(
+        stats = youtube.channels().list(
             id=canal_id, part="statistics,snippet"
         ).execute()["items"][0]
         
         nome = stats["snippet"]["title"]
-        descricao = stats["snippet"].get("description", "Sem descrição.")
         data_criacao = stats["snippet"]["publishedAt"]
         foto_url = stats["snippet"]["thumbnails"]["high"]["url"]
+        pais = stats["snippet"].get("country", "Não informado")
         
         inscritos = int(stats["statistics"].get("subscriberCount", 0))
         total_visualizacoes = int(stats["statistics"].get("viewCount", 0))
@@ -121,103 +48,68 @@ def pegar_dados_canal(youtube_client, canal_id, origem="Busca automática"):
         relacao = media_por_video / inscritos if inscritos > 0 else 0
         
         return {
-            "foto": foto_url,
             "nome": nome,
-            "descricao": descricao[:140] + "...",
             "canal_id": canal_id,
             "inscritos": inscritos,
-            "videos": qtd_videos,
             "media_visualizacoes_video": round(media_por_video),
             "relacao_vid_ins": round(relacao, 2),
             "data_criacao": data_criacao[:10],
+            "pais": pais,
+            "foto_canal": foto_url,
             "url": f"https://youtube.com/channel/{canal_id}",
             "origem": origem
         }
     except Exception as e:
+        print(f"⚠️ Erro ao buscar canal {canal_id}: {e}")
         return None
 
-if executar_busca:
-    if not chave_api:
-        st.error("⚠️ Insira a Chave da API do YouTube na barra lateral.")
-    else:
-        try:
-            youtube = build("youtube", "v3", developerKey=chave_api)
-            todos_canais = []
-            
-            with st.spinner(f"🔍 Analisando ecossistema aplicando filtros de qualidade..."):
-                data_limite = (datetime.now() - timedelta(days=idade_maxima)).isoformat() + "Z"
-                
-                request = youtube.search().list(
-                    q=nicho, type="channel", part="id,snippet",
-                    maxResults=max_resultados, publishedAfter=data_limite
-                )
-                response = request.execute()
-                
-                for item in response.get("items", []):
-                    canal_id = item["id"]["channelId"]
-                    dados = pegar_dados_canal(youtube, canal_id, origem="Outlier Detectado")
-                    if dados:
-                        # Validação rigorosa dos filtros anti-fantasmas
-                        if min_inscritos <= dados["inscritos"] <= max_inscritos:
-                            if dados["videos"] >= min_videos:
-                                if dados["relacao_vid_ins"] >= min_relacao:
-                                    todos_canais.append(dados)
-                
-                if lista_referencias:
-                    for cid in lista_referencias:
-                        dados_ref = pegar_dados_canal(youtube, cid, origem="✅ Referência Direta")
-                        if dados_ref:
-                            todos_canais.append(dados_ref)
-            
-            if todos_canais:
-                st.success(f"🎉 Sucesso! Encontrados {len(todos_canais)} canais qualificados.")
-                
-                for canal in todos_canais:
-                    st.markdown(f"""
-                        <div class="canal-card">
-                            <div style="display: flex; align-items: flex-start; gap: 20px;">
-                                <img src="{canal['foto']}" style="width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 2px solid #374151;">
-                                <div style="flex-grow: 1;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                        <h3 style="margin: 0; color: #ffffff; font-size: 20px;">{canal['nome']}</h3>
-                                        <span class="badge-origem">{canal['origem']}</span>
-                                    </div>
-                                    <p style="color: #9ca3af; font-size: 13px; margin-bottom: 12px;">{canal['descricao']}</p>
-                                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px;">
-                                        <div class="metric-box"><span style="font-size: 11px; color: #9ca3af;">Inscritos</span><br><b style="color: #fff;">{canal['inscritos']:,}</b></div>
-                                        <div class="metric-box"><span style="font-size: 11px; color: #9ca3af;">Média Views/Vídeo</span><br><b style="color: #38bdf8;">{canal['media_visualizacoes_video']:,}</b></div>
-                                        <div class="metric-box"><span style="font-size: 11px; color: #9ca3af;">Índice Outlier</span><br><b style="color: #4ade80;">{canal['relacao_vid_ins']}x</b></div>
-                                        <div class="metric-box"><span style="font-size: 11px; color: #9ca3af;">Vídeos / Criação</span><br><b style="color: #fff;">{canal['videos']} v. ({canal['data_criacao']})</b></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    col_l, col_r = st.columns([6, 1])
-                    with col_r:
-                        st.link_button("🔗 Ver Canal", canal['url'], use_container_width=True)
-                    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-                
-                # Nome de arquivo seguro contra caracteres especiais e acentos
-                nicho_limpo = re.sub(r'[^a-zA-Z0-9]', '_', nicho)
-                nome_arquivo = f"tubemodeler_{nicho_limpo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                
-                df = pd.DataFrame(todos_canais)
-                df.to_excel(nome_arquivo, index=False)
-                
-                with open(nome_arquivo, "rb") as file:
-                    st.download_button(
-                        label="📥 Descarregar Relatório Completo em Excel",
-                        data=file,
-                        file_name=nome_arquivo,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-            else:
-                st.warning("⚠️ Nenhum canal passou nestes filtros de qualidade. Tente diminuir um pouco o mínimo de inscritos ou o índice outlier na barra lateral.")
-                
-        except Exception as e:
-            st.error(f"❌ Erro na execução da API: {e}")
-else:
-    st.info("👈 Configure os parâmetros de qualidade na **barra lateral à esquerda** e clique em **INICIAR GARIMPAGEM**.")
+def buscar_canais_nicho(palavra_chave):
+    """Busca canais novos no nicho com os filtros"""
+    print(f"🔍 Buscando canais de '{palavra_chave}'...")
+    canais_encontrados = []
+    
+    data_limite = (datetime.now() - timedelta(days=IDADE_MAXIMA_DIAS)).isoformat() + "Z"
+    
+    request = youtube.search().list(
+        q=palavra_chave, type="channel", part="id,snippet",
+        maxResults=MAX_RESULTADOS_BUSCA, publishedAfter=data_limite
+    )
+    response = request.execute()
+    
+    for item in response["items"]:
+        canal_id = item["id"]["channelId"]
+        dados = pegar_dados_canal_por_id(canal_id, origem="Busca automática")
+        
+        if dados and dados["inscritos"] > 0 and dados["inscritos"] <= MAX_INSCRITOS:
+            if dados["relacao_vid_ins"] >= MIN_RELACAO_VIS_INS:
+                canais_encontrados.append(dados)
+    
+    return canais_encontrados
+
+# ▶️ EXECUTAR TUDO
+if __name__ == "__main__":
+    todos_canais = []
+    
+    # 1️⃣ Buscar canais novos
+    canais_novos = buscar_canais_nicho(NICHO)
+    todos_canais.extend(canais_novos)
+    
+    # 2️⃣ Adicionar seus canais de referência
+    print(f"\n📋 Carregando seus {len(CANAIS_REFERENCIA)} canais de referência...")
+    for canal_id in CANAIS_REFERENCIA:
+        dados = pegar_dados_canal_por_id(canal_id, origem="✅ Referência")
+        if dados:
+            todos_canais.append(dados)
+    
+    # 💾 Salvar tudo no Excel
+    df = pd.DataFrame(todos_canais)
+    nome_arquivo = f"canais-garimpados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    df.to_excel(nome_arquivo, index=False)
+    
+    # 📊 Resumo na tela
+    print(f"\n✅ Concluído! {len(todos_canais)} canais processados")
+    print(f"📂 Arquivo salvo: {nome_arquivo}")
+    print("\n📋 Origem | Nome | Inscritos | Média Views | Relação")
+    print("-" * 70)
+    for _, row in df.iterrows():
+        print(f"{row['origem']} | {row['nome'][:25]} | {row['inscritos']} | {row['media_visualizacoes_video']} | {row['relacao_vid_ins']}")
